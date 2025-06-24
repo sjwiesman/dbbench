@@ -129,7 +129,13 @@ func (s *sqlDb) countQueryRows(w *SafeCSVWriter, q string, args []interface{}) (
 }
 
 func (s *sqlDb) countExecRows(q string, args []interface{}) (int64, error) {
-	res, err := s.db.Exec(q, args...)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Commit()
+
+	res, err := tx.Exec(q, args...)
 	if err != nil {
 		return 0, err
 	}
