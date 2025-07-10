@@ -128,8 +128,26 @@ func (s *sqlDb) countQueryRows(w *SafeCSVWriter, q string, args []interface{}) (
 	return rowsAffected, nil
 }
 
+type execer interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+}
+
 func (s *sqlDb) countExecRows(q string, args []interface{}) (int64, error) {
-	res, err := s.db.Exec(q, args...)
+	var conn execer = s.db
+	if *transactionMode {
+		tx, err := s.db.Begin()
+		conn = tx
+		if err != nil {
+			return 0, err
+		}
+		if *transactionRollback {
+			defer tx.Rollback()
+		} else {
+			defer tx.Commit()
+		}
+	}
+
+	res, err := conn.Exec(q, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -150,6 +168,8 @@ type sqlDatabaseFlavor struct {
 var forcePreAuth = flag.Bool("force-pre-auth", false, "Force the creation and authorization of all idle connections outside the benchmar loop")
 var maxIdleConns = flag.Int("max-idle-conns", 100, "Maximum idle database connections")
 var maxActiveConns = flag.Int("max-active-conns", 0, "Maximum active database connections")
+var transactionMode = flag.Bool("transaction", false, "Wrap each query in a transaction")
+var transactionRollback = flag.Bool("transaction-rollback", false, "If true, use ROLLBACK instead of COMMIT when -transaction is true")
 
 func (sq *sqlDatabaseFlavor) QuerySeparator() string {
 	return ";"
